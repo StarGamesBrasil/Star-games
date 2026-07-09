@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mini Pong Mobile</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        h1 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            color: #888;
+        }
+        #canvasContainer {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 4 / 3;
+            background: #000;
+            border: 4px solid #fff;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .instrucoes {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #666;
+            text-align: center;
+            padding: 0 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>PONG</h1>
+    <div id="canvasContainer">
+        <canvas id="pongCanvas" width="800" height="600"></canvas>
+    </div>
+    <div class="instrucoes">
+        No celular: Arraste o dedo na tela para mover sua raquete.<br>
+        No PC: Use as setas do teclado (Cima/Baixo) ou o mouse.
+    </div>
+
+    <script>
+        const canvas = document.getElementById("pongCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Configurações do Jogo
+        const paddleWidth = 15;
+        const paddleHeight = 100;
+        const ballRadius = 10;
+
+        // Raquete do Jogador (Esquerda)
+        const player = {
+            x: 20,
+            y: canvas.height / 2 - paddleHeight / 2,
+            width: paddleWidth,
+            height: paddleHeight,
+            score: 0,
+            color: "#00FF66"
+        };
+
+        // Raquete do Computador (Direita)
+        const computer = {
+            x: canvas.width - 20 - paddleWidth,
+            y: canvas.height / 2 - paddleHeight / 2,
+            width: paddleWidth,
+            height: paddleHeight,
+            score: 0,
+            color: "#FF3366"
+        };
+
+        // Bola
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: ballRadius,
+            speed: 7,
+            velocityX: 7,
+            velocityY: 7,
+            color: "#FFFF00"
+        };
+
+        // --- CONTROLES (PC e Mobile) ---
+
+        // Controle por Toque / Mouse (Movimento contínuo)
+        function moverRaqueteComPonteiro(clientY) {
+            const rect = canvas.getBoundingClientRect();
+            // Calcula a posição Y relativa dentro do canvas real
+            const relativeY = clientY - rect.top;
+            // Escala a posição para a resolução interna do canvas (800x600)
+            const canvasY = (relativeY / rect.height) * canvas.height;
+            
+            // Centraliza a raquete no dedo/mouse
+            player.y = canvasY - player.height / 2;
+
+            // Limites da tela
+            if (player.y < 0) player.y = 0;
+            if (player.y + player.height > canvas.height) player.y = canvas.height - player.height;
+        }
+
+        // Eventos de Toque (Celular)
+        window.addEventListener("touchmove", (e) => {
+            if (e.touches.length > 0) {
+                moverRaqueteComPonteiro(e.touches[0].clientY);
+            }
+        }, { passive: true });
+
+        // Eventos de Mouse (PC)
+        canvas.addEventListener("mousemove", (e) => {
+            moverRaqueteComPonteiro(e.clientY);
+        });
+
+        // Controles de Teclado (Alternativa para PC)
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowUp" && player.y > 0) player.y -= 40;
+            if (e.key === "ArrowDown" && player.y + player.height < canvas.height) player.y += 40;
+        });
+
+
+        // --- LÓGICA DO JOGO ---
+
+        // Resetar a bola após um ponto
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.speed = 7;
+            ball.velocityX = -ball.velocityX; // Muda de lado
+            ball.velocityY = (Math.random() - 0.5) * 10; // Ângulo aleatório
+        }
+
+        // Detecção de colisão simples
+        function collision(b, p) {
+            p.top = p.y;
+            p.bottom = p.y + p.height;
+            p.left = p.x;
+            p.right = p.x + p.width;
+
+            b.top = b.y - b.radius;
+            b.bottom = b.y + b.radius;
+            b.left = b.x - b.radius;
+            b.right = b.x + b.radius;
+
+            return b.right > p.left && b.bottom > p.top && b.left < p.right && b.top < p.bottom;
+        }
+
+        // Atualização dos movimentos e física
+        function update() {
+            // Movimentação da bola
+            ball.x += ball.velocityX;
+            ball.y += ball.velocityY;
+
+            // Inteligência Artificial do Computador (Segue a bola de forma suave)
+            let computerTarget = ball.y - computer.height / 2;
+            computer.y += (computerTarget - computer.y) * 0.09; // 0.09 dita a dificuldade (maior = mais difícil)
+
+            // Colisão da bola com as paredes (Teto e Chão)
+            if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
+                ball.velocityY = -ball.velocityY;
+            }
+
+            // Verifica qual raquete a bola está indo em direção
+            let playerTarget = (ball.x < canvas.width / 2) ? player : computer;
+
+            if (collision(ball, playerTarget)) {
+                // Onde a bola bateu na raquete (-1 até 1)
+                let collidePoint = (ball.y - (playerTarget.y + playerTarget.height / 2));
+                collidePoint = collidePoint / (playerTarget.height / 2);
+
+                // Calcula o ângulo em radianos
+                let angleRad = (Math.PI / 4) * collidePoint;
+
+                // Direção X da bola quando bate
+                let direction = (ball.x < canvas.width / 2) ? 1 : -1;
+
+                // Atualiza velocidade e ângulo
+                ball.velocityX = direction * ball.speed * Math.cos(angleRad);
+                ball.velocityY = ball.speed * Math.sin(angleRad);
+
+                // Aumenta a velocidade a cada rebatida para o jogo ficar dinâmico
+                ball.speed += 0.5;
+            }
+
+            // Pontuação
+            if (ball.x - ball.radius < 0) {
+                computer.score++;
+                resetBall();
+            } else if (ball.x + ball.radius > canvas.width) {
+                player.score++;
+                resetBall();
+            }
+        }
+
+        // --- RENDERIZAÇÃO NA TELA ---
+        function render() {
+            // Limpa o Canvas
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Linha central
+            ctx.strokeStyle = "#ffffff44";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+
+            // Desenha as raquetes
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            ctx.fillStyle = computer.color;
+            ctx.fillRect(computer.x, computer.y, computer.width, computer.height);
+
+            // Desenha a Bola
+            ctx.fillStyle = ball.color;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2, false);
+            ctx.closePath();
+            ctx.fill();
+
+            // Desenha o Placar
+            ctx.fillStyle = "#FFF";
+            ctx.font = "bold 45px Arial";
+            ctx.fillText(player.score, canvas.width / 4, 60);
+            ctx.fillText(computer.score, (3 * canvas.width) / 4, 60);
+        }
+
+        // Loop principal do jogo
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Inicia o jogo
+        gameLoop();
+    </script>
+</body>
+</html>
